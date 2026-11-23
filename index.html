@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xbox Controller Tester</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0f14;--card:#151b23;--line:#26303b;--text:#e7edf3;--dim:#93a4b5;--ok:#31c48d;--warn:#f6ad55;--bad:#f56565;--accent:#4f9cff}
+*{box-sizing:border-box}body{margin:0 auto;max-width:760px;padding:14px;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+h1{font-size:22px;margin:8px 0 4px}h3{margin:0 0 10px;font-size:17px}p{margin:6px 0}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.small{font-size:13px;color:var(--dim)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px}.btn{border:1px solid var(--line);background:#0f151c;border-radius:10px;padding:10px 6px;min-height:58px;text-align:center;font-size:12px;display:flex;flex-direction:column;justify-content:center;gap:3px}.btn b{font-size:14px}.on{background:#123d2b;border-color:var(--ok);color:#d8ffe9}.bar{height:12px;background:#0f151c;border:1px solid var(--line);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;width:0%;background:var(--accent)}.stickwrap{display:flex;gap:14px;flex-wrap:wrap}.stick{width:150px}.pad{position:relative;width:150px;height:150px;background:#0f151c;border:1px solid var(--line);border-radius:50%}.dot{position:absolute;left:64px;top:64px;width:22px;height:22px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%)}.cross{position:absolute;inset:0}.cross:before,.cross:after{content:"";position:absolute;background:#26303b}.cross:before{left:50%;top:8px;bottom:8px;width:1px}.cross:after{top:50%;left:8px;right:8px;height:1px}.status{font-weight:700}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}button{background:var(--accent);color:#04121f;border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px}button:disabled{opacity:.45}
+</style>
+</head>
+<body>
+<h1>Xbox Controller Tester</h1>
+<p class="small">Connect your Xbox controller with a USB-OTG adapter, open this page in Chrome on Android, then press any controller button.</p>
+<div class="card"><div class="row"><span id="status" class="status warn">No controller detected</span><button id="vibe" disabled>Test rumble</button></div><p class="small" id="id">Waiting for input…</p></div>
+<div class="card"><h3>Buttons</h3><div class="grid" id="buttons"></div></div>
+<div class="card"><h3>Analog sticks</h3><div class="stickwrap" id="sticks"></div><p class="small">Leave both sticks untouched for about 10 seconds. If values change while you are not touching a stick, it may have drift.</p><div id="drift"></div></div>
+<div class="card"><h3>Triggers</h3><div class="row"><div style="flex:1"><span>LT</span><div class="bar"><i id="lt"></i></div></div><div style="flex:1"><span>RT</span><div class="bar"><i id="rt"></i></div></div></div></div>
+<div class="card"><h3>Test checklist</h3><div id="checks" class="small"></div></div>
+<script>
+const names=['A','B','X','Y','LB','RB','LT','RT','View','Menu','Xbox','LS click','RS click','D-up','D-down','D-left','D-right','Extra 1'];
+const els={};const grid=document.getElementById('buttons');
+names.forEach((n,i)=>{const d=document.createElement('div');d.className='btn';d.innerHTML=`<b>${n}</b><span class="small">—</span>`;grid.appendChild(d);els[i]=d});
+const stickEls={};
+['Left stick','Right stick'].forEach((n,i)=>{const w=document.createElement('div');w.className='stick';w.innerHTML=`<b>${n}</b><div class="pad"><div class="cross"></div><div class="dot"></div></div><div class="small vals">X 0.00 · Y 0.00</div>`;document.getElementById('sticks').appendChild(w);stickEls[i]={dot:w.querySelector('.dot'),vals:w.querySelector('.vals')}});
+let last={};let drift={0:{x:0,y:0},1:{x:0,y:0}};
+const checks={buttons:new Set(),sticks:new Set(),triggers:false,rumble:false};
+function getPad(){const p=navigator.getGamepads?navigator.getGamepads():[];return Array.from(p).find(x=>x)}
+function render(){
+const pad=getPad();const st=document.getElementById('status');const vb=document.getElementById('vibe');
+if(!pad){st.textContent='No controller detected';st.className='status warn';vb.disabled=true;requestAnimationFrame(render);return}
+st.textContent='Connected: '+pad.id.slice(0,42);st.className='status ok';vb.disabled=false;
+document.getElementById('id').textContent=`${pad.buttons.length} buttons · ${pad.axes.length} axes · mapping: ${pad.mapping}`;
+pad.buttons.forEach((b,i)=>{const e=els[i];if(!e)return;e.classList.toggle('on',b.pressed);e.querySelector('span').textContent=b.value.toFixed(2);if(b.pressed)checks.buttons.add(i)});
+[0,1].forEach(s=>{const x=pad.axes[s*2]||0,y=pad.axes[s*2+1]||0;const se=stickEls[s];
+se.dot.style.left=(75+x*65)+'px';se.dot.style.top=(75+y*65)+'px';se.vals.textContent=`X ${x.toFixed(2)} · Y ${y.toFixed(2)}`;
+if(Math.abs(x)>.55||Math.abs(y)>.55)checks.sticks.add(s);
+const key=s+'-'+x.toFixed(2)+'-'+y.toFixed(2);
+if(last[s]&&last[s]!==key){drift[s].x=Math.max(drift[s].x,Math.abs(x));drift[s].y=Math.max(drift[s].y,Math.abs(y))}last[s]=key});
+const lt=pad.buttons[6]?.value||0,rt=pad.buttons[7]?.value||0;
+document.getElementById('lt').style.width=(lt*100)+'%';document.getElementById('rt').style.width=(rt*100)+'%';
+if(lt>.95&&rt>.95)checks.triggers=true;
+const bad=[0,1].filter(s=>drift[s].x>.08||drift[s].y>.08);
+document.getElementById('drift').innerHTML=bad.length?`<p class="bad">Possible drift detected: ${bad.map(s=>s?'Right':'Left').join(', ')} stick.</p>`:'<p class="ok">No drift detected yet.</p>';
+document.getElementById('checks').innerHTML=`Buttons pressed: ${checks.buttons.size}/${Math.min(pad.buttons.length,names.length)}<br>Sticks moved fully: ${checks.sticks.size}/2<br>Both triggers fully pressed: ${checks.triggers?'Yes':'No'}<br>Rumble tested: ${checks.rumble?'Yes':'No'}`;
+requestAnimationFrame(render)}
+document.getElementById('vibe').addEventListener('click',async()=>{const pad=getPad();
+try{await pad.vibrationActuator.playEffect('dual-rumble',{startDelay:0,duration:800,weakMagnitude:1,strongMagnitude:1});checks.rumble=true}
+catch(e){alert('Rumble is not available through this browser or USB connection. Test vibration on an Xbox console or Windows PC to confirm the motors.')}});
+render();
+</script>
+</body>
+</html>
